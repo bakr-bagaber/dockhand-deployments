@@ -1,0 +1,130 @@
+services:
+  smtp:
+    image: axllent/mailpit:latest
+    container_name: zulip_smtp
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - default
+    volumes:
+      - mailpit_data:/tmp/mailpit
+
+  database:
+    image: "zulip/zulip-postgresql:14"
+    container_name: zulip_database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "zulip"
+      POSTGRES_USER: "zulip"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - "postgresql-14:/var/lib/postgresql/data:rw"
+
+  memcached:
+    image: "memcached:alpine"
+    container_name: zulip_memcached
+    restart: unless-stopped
+    command:
+      - "sh"
+      - "-euc"
+      - |
+        echo 'mech_list: plain' > "$$SASL_CONF_PATH"
+        echo "zulip@$$HOSTNAME:$$MEMCACHED_PASSWORD" > "$$MEMCACHED_SASL_PWDB"
+        echo "zulip@localhost:$$MEMCACHED_PASSWORD" >> "$$MEMCACHED_SASL_PWDB"
+        exec memcached -S
+    environment:
+      SASL_CONF_PATH: "/home/memcache/memcached.conf"
+      MEMCACHED_SASL_PWDB: "/home/memcache/memcached-sasl-db"
+      MEMCACHED_PASSWORD: "${MEMCACHED_PASSWORD}"
+
+  rabbitmq:
+    image: "rabbitmq:4.1"
+    container_name: zulip_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: "zulip"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS}"
+    volumes:
+      - "rabbitmq:/var/lib/rabbitmq:rw"
+
+  redis:
+    image: "redis:alpine"
+    container_name: zulip_redis
+    restart: unless-stopped
+    command:
+      - "sh"
+      - "-euc"
+      - |
+        echo "requirepass '$$REDIS_PASSWORD'" > /etc/redis.conf
+        exec redis-server /etc/redis.conf
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    volumes:
+      - "redis:/data:rw"
+
+  zulip:
+    image: "zulip/docker-zulip:11.6-0"
+    container_name: zulip_dashboard
+    restart: unless-stopped
+    ports:
+      - "8081:443"
+    # Fix nginx $http_host redirect (preserves port in Host header)
+    # and add server_name localhost for HTTPS to accept Host:localhost requests.
+    # This is required because:
+    # 1. $host strips port from "localhost:8081" causing redirect to https://localhost/
+    # 2. nginx HTTPS server needs explicit server_name to match Host:localhost
+    command: >
+      /bin/bash -c "
+        sed -i 's|return 301 https://\\\$host\\\$request_uri;|return 301 https://\\\$http_host\\\$request_uri;|' /etc/nginx/sites-enabled/zulip-enterprise;
+        sed -i '/listen \[::\]:443 ssl http2;/a\\    server_name localhost;' /etc/nginx/sites-enabled/zulip-enterprise;
+        /sbin/entrypoint.sh [app:run]
+      "
+    environment:
+      DB_HOST: "database"
+      DB_HOST_PORT: "5432"
+      DB_USER: "zulip"
+      SSL_CERTIFICATE_GENERATION: "self-signed"
+      SETTING_MEMCACHED_LOCATION: "memcached:11211"
+      SETTING_RABBITMQ_HOST: "rabbitmq"
+      SETTING_REDIS_HOST: "redis"
+      SECRETS_email_password: "${SECRETS_email_password}"
+      SECRETS_rabbitmq_password: "${SECRETS_rabbitmq_password}"
+      SECRETS_postgres_password: "${SECRETS_postgres_password}"
+      SECRETS_memcached_password: "${SECRETS_memcached_password}"
+      SECRETS_redis_password: "${SECRETS_redis_password}"
+      SECRETS_secret_key: "${SECRETS_secret_key}"
+      SETTING_EXTERNAL_HOST: "${SETTING_EXTERNAL_HOST}"
+      SETTING_ZULIP_ADMINISTRATOR: "${SETTING_ZULIP_ADMINISTRATOR}"
+      SETTING_EMAIL_HOST: "${SETTING_EMAIL_HOST}"
+      SETTING_EMAIL_HOST_USER: "${SETTING_EMAIL_HOST_USER}"
+      SETTING_EMAIL_PORT: "${SETTING_EMAIL_PORT}"
+      SETTING_EMAIL_USE_SSL: "${SETTING_EMAIL_USE_SSL}"
+      SETTING_EMAIL_USE_TLS: "${SETTING_EMAIL_USE_TLS}"
+      ZULIP_AUTH_BACKENDS: "${ZULIP_AUTH_BACKENDS}"
+      QUEUE_WORKERS_MULTIPROCESS: "${QUEUE_WORKERS_MULTIPROCESS}"
+    volumes:
+      - "zulip:/data:rw"
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1048576
+    depends_on:
+      - database
+      - memcached
+      - rabbitmq
+      - redis
+      - smtp
+
+volumes:
+  zulip:
+    name: zulip_zulip
+  postgresql-14:
+    name: zulip_postgresql-14
+  rabbitmq:
+    name: zulip_rabbitmq
+  redis:
+    name: zulip_redis
+  mailpit_data:
+    name: zulip_mailpit_data

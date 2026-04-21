@@ -1,0 +1,103 @@
+services:
+  ops-honcho-db:
+    image: pgvector/pgvector:pg15
+    container_name: ops-honcho-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - honcho_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      ops.managed: "true"
+      ops.service: "honcho"
+      ops.component: "database"
+
+  ops-honcho-redis:
+    image: redis:8.2
+    container_name: ops-honcho-redis
+    restart: unless-stopped
+    volumes:
+      - honcho_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      ops.managed: "true"
+      ops.service: "honcho"
+      ops.component: "cache"
+
+  ops-honcho-api:
+    image: honcho-api:latest
+    container_name: ops-honcho-api
+    restart: unless-stopped
+    depends_on:
+      ops-honcho-db:
+        condition: service_healthy
+      ops-honcho-redis:
+        condition: service_healthy
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@ops-honcho-db:5432/postgres
+      - CACHE_URL=redis://ops-honcho-redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      - LLM_OPENAI_COMPATIBLE_BASE_URL=http://host.docker.internal:20128/v1
+      - LLM_OPENAI_COMPATIBLE_API_KEY=dummy-key-for-local
+      - LLM_EMBEDDING_PROVIDER=openrouter
+      - DERIVER_PROVIDER=custom
+      - DERIVER_MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__minimal__PROVIDER=custom
+      - DIALECTIC_LEVELS__minimal__MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__minimal__THINKING_BUDGET_TOKENS=0
+      - DIALECTIC_LEVELS__minimal__MAX_TOOL_ITERATIONS=1
+      - DIALECTIC_LEVELS__low__PROVIDER=custom
+      - DIALECTIC_LEVELS__low__MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__low__THINKING_BUDGET_TOKENS=0
+      - DIALECTIC_LEVELS__low__MAX_TOOL_ITERATIONS=5
+      - DIALECTIC_LEVELS__medium__PROVIDER=custom
+      - DIALECTIC_LEVELS__medium__MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__medium__THINKING_BUDGET_TOKENS=0
+      - DIALECTIC_LEVELS__medium__MAX_TOOL_ITERATIONS=2
+      - DIALECTIC_LEVELS__high__PROVIDER=custom
+      - DIALECTIC_LEVELS__high__MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__high__THINKING_BUDGET_TOKENS=0
+      - DIALECTIC_LEVELS__high__MAX_TOOL_ITERATIONS=4
+      - DIALECTIC_LEVELS__max__PROVIDER=custom
+      - DIALECTIC_LEVELS__max__MODEL=opencode-go/glm-4
+      - DIALECTIC_LEVELS__max__THINKING_BUDGET_TOKENS=0
+      - DIALECTIC_LEVELS__max__MAX_TOOL_ITERATIONS=10
+      - SUMMARY_PROVIDER=custom
+      - SUMMARY_MODEL=opencode-go/glm-4
+      - DREAM_PROVIDER=custom
+      - DREAM_MODEL=opencode-go/glm-4
+      - DREAM_DEDUCTION_MODEL=opencode-go/glm-4
+      - DREAM_INDUCTION_MODEL=opencode-go/glm-4
+      - VECTOR_STORE_TYPE=pgvector
+      - VECTOR_STORE_DIMENSIONS=1536
+      - AUTH_USE_AUTH=false
+    ports:
+      - "127.0.0.1:8013:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      ops.managed: "true"
+      ops.service: "honcho"
+      ops.component: "api"
+
+volumes:
+  honcho_pgdata:
+    name: ops-honcho-pgdata
+  honcho_redis_data:
+    name: ops-honcho-redis-data

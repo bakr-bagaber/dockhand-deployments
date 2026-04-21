@@ -1,0 +1,98 @@
+services:
+  openproject-db:
+    image: postgres:17
+    container_name: openproject_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openproject
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${OPENPROJECT_POSTGRES_PASSWORD}
+    volumes:
+      - ops_openproject_pgdata:/var/lib/postgresql/data
+
+  openproject-cache:
+    image: memcached:1.6-alpine
+    container_name: openproject_cache
+    restart: unless-stopped
+
+  openproject-web:
+    image: openproject/openproject:${OPENPROJECT_TAG:-17-slim}
+    container_name: openproject_web
+    restart: unless-stopped
+    depends_on:
+      - openproject-db
+      - openproject-cache
+    environment:
+      OPENPROJECT_HTTPS: ${OPENPROJECT_HTTPS:-false}
+      OPENPROJECT_HOST__NAME: ${OPENPROJECT_HOST_NAME:-localhost:8080}
+      OPENPROJECT_HSTS: ${OPENPROJECT_HSTS:-false}
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: openproject-cache:11211
+      DATABASE_URL: postgres://postgres:${OPENPROJECT_POSTGRES_PASSWORD}@openproject-db/openproject?pool=20&encoding=unicode&reconnect=true
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_EMAIL_DELIVERY_METHOD: ${OPENPROJECT_EMAIL_DELIVERY_METHOD:-none}
+      OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED: ${OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED:-false}
+      IMAP_ENABLED: "false"
+    volumes:
+      - ops_openproject_assets:/var/openproject/assets
+    command: ./docker/prod/web
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health_checks/default"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  openproject-worker:
+    image: openproject/openproject:${OPENPROJECT_TAG:-17-slim}
+    container_name: openproject_worker
+    restart: unless-stopped
+    depends_on:
+      - openproject-db
+      - openproject-cache
+    environment:
+      OPENPROJECT_HTTPS: ${OPENPROJECT_HTTPS:-false}
+      OPENPROJECT_HOST__NAME: ${OPENPROJECT_HOST_NAME:-localhost:8080}
+      OPENPROJECT_HSTS: ${OPENPROJECT_HSTS:-false}
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: openproject-cache:11211
+      DATABASE_URL: postgres://postgres:${OPENPROJECT_POSTGRES_PASSWORD}@openproject-db/openproject?pool=20&encoding=unicode&reconnect=true
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_EMAIL_DELIVERY_METHOD: ${OPENPROJECT_EMAIL_DELIVERY_METHOD:-none}
+      OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED: ${OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED:-false}
+      IMAP_ENABLED: "false"
+    volumes:
+      - ops_openproject_assets:/var/openproject/assets
+    command: ./docker/prod/worker
+
+  openproject-cron:
+    image: openproject/openproject:${OPENPROJECT_TAG:-17-slim}
+    container_name: openproject_cron
+    restart: unless-stopped
+    depends_on:
+      - openproject-db
+      - openproject-cache
+    environment:
+      OPENPROJECT_HTTPS: ${OPENPROJECT_HTTPS:-false}
+      OPENPROJECT_HOST__NAME: ${OPENPROJECT_HOST_NAME:-localhost:8080}
+      OPENPROJECT_HSTS: ${OPENPROJECT_HSTS:-false}
+      OPENPROJECT_RAILS__CACHE__STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: openproject-cache:11211
+      DATABASE_URL: postgres://postgres:${OPENPROJECT_POSTGRES_PASSWORD}@openproject-db/openproject?pool=20&encoding=unicode&reconnect=true
+      SECRET_KEY_BASE: ${OPENPROJECT_SECRET_KEY_BASE}
+      OPENPROJECT_EMAIL_DELIVERY_METHOD: ${OPENPROJECT_EMAIL_DELIVERY_METHOD:-none}
+      OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED: ${OPENPROJECT_INCOMING_EMAIL_CHECK_ENABLED:-false}
+      IMAP_ENABLED: "false"
+    volumes:
+      - ops_openproject_assets:/var/openproject/assets
+    command: ./docker/prod/cron
+
+volumes:
+  ops_openproject_pgdata:
+    name: ops_openproject_pgdata
+    external: true
+  ops_openproject_assets:
+    name: ops_openproject_assets
+    external: true
