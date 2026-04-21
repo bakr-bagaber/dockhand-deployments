@@ -75,7 +75,7 @@ services:
     # This is required because:
     # 1. $host strips port from "localhost:8081" causing redirect to https://localhost/
     # 2. nginx HTTPS server needs explicit server_name to match Host:localhost
-    command: >
+    command: |
       /bin/bash -c "
         sed -i 's|return 301 https://\\\$host\\\$request_uri;|return 301 https://\\\$http_host\\\$request_uri;|' /etc/nginx/sites-enabled/zulip-enterprise;
         sed -i '/listen \[::\]:443 ssl http2;/a\\    server_name localhost;' /etc/nginx/sites-enabled/zulip-enterprise;
