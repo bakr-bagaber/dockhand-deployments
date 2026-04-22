@@ -26,18 +26,6 @@ services:
     image: "memcached:alpine"
     container_name: zulip_memcached
     restart: unless-stopped
-    command:
-      - "sh"
-      - "-euc"
-      - |
-        echo 'mech_list: plain' > "$$SASL_CONF_PATH"
-        echo "zulip@$$HOSTNAME:$$MEMCACHED_PASSWORD" > "$$MEMCACHED_SASL_PWDB"
-        echo "zulip@localhost:$$MEMCACHED_PASSWORD" >> "$$MEMCACHED_SASL_PWDB"
-        exec memcached -S
-    environment:
-      SASL_CONF_PATH: "/home/memcache/memcached.conf"
-      MEMCACHED_SASL_PWDB: "/home/memcache/memcached-sasl-db"
-      MEMCACHED_PASSWORD: "${MEMCACHED_PASSWORD}"
 
   rabbitmq:
     image: "rabbitmq:4.1"
@@ -70,23 +58,12 @@ services:
     restart: unless-stopped
     ports:
       - "8081:443"
-    # Fix nginx $http_host redirect (preserves port in Host header)
-    # and add server_name localhost for HTTPS to accept Host:localhost requests.
-    # This is required because:
-    # 1. $host strips port from "localhost:8081" causing redirect to https://localhost/
-    # 2. nginx HTTPS server needs explicit server_name to match Host:localhost
-    command:
-      - sh
-      - -euc
-      - |
-        sed -i 's|return 301 https://\$host\$request_uri;|return 301 https://\$http_host\$request_uri;|' /etc/nginx/sites-enabled/zulip-enterprise
-        sed -i '/listen \[::\]:443 ssl http2;/a\    server_name localhost;' /etc/nginx/sites-enabled/zulip-enterprise
-        exec /sbin/entrypoint.sh "[app:run]"
     environment:
       DB_HOST: "database"
       DB_HOST_PORT: "5432"
       DB_USER: "zulip"
       SSL_CERTIFICATE_GENERATION: "self-signed"
+      MEMCACHED_PASSWORD: "${MEMCACHED_PASSWORD}"
       SETTING_MEMCACHED_LOCATION: "memcached:11211"
       SETTING_RABBITMQ_HOST: "rabbitmq"
       SETTING_REDIS_HOST: "redis"
