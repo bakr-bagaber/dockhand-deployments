@@ -13,9 +13,6 @@ services:
   omniroute:
     <<: *common
     container_name: omniroute
-    build:
-      context: /home/bakrb/ops/data/builds/omniroute
-      target: runner-base
     image: omniroute:base
     environment:
       - DATA_DIR=/app/data
