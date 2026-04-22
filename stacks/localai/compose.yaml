@@ -12,7 +12,7 @@ services:
     container_name: localai_api
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:8082:8080"
     volumes:
       - localai_models:/models
     environment:
