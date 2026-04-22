@@ -28,7 +28,7 @@ services:
       - CORS=true
       - CORS_ALLOW_ORIGINS=*
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/readyz || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -39,18 +39,6 @@ services:
       ops.component: "api"
     networks:
       - localai_default
-
-  # ── LocalAI Watchdog (optional auto-reload) ──────────────────────
-  # Uncomment if you want automatic model reloading when files change
-  # localai_watcher:
-  #   image: quay.io/go-skynet/local-ai:latest
-  #   container_name: localai_watcher
-  #   restart: unless-stopped
-  #   volumes:
-  #     - localai_models:/models:ro
-  #   entrypoint: ["watchmedo", "auto-restart", "--directory", "/models", "--pattern", "*.bin", "--", "local-ai", "--models-path", "/models"]
-  #   networks:
-  #     - localai_default
 
 networks:
   localai_default:
