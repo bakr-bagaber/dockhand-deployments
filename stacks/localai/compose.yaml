@@ -1,0 +1,65 @@
+name: localai
+
+# LocalAI — Self-hosted OpenAI-compatible LLM inference server.
+# Supports llama.cpp, transformers, diffusers, whisper, and more.
+# Models are loaded from the localai_models volume.
+# After stack is up, use POST /models/load to load specific models.
+
+services:
+  # ── LocalAI API Server ───────────────────────────────────────────
+  localai_api:
+    image: quay.io/go-skynet/local-ai:latest
+    container_name: localai_api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - localai_models:/models
+    environment:
+      # Backend to use: llama.cpp (cublas), transformers, etc.
+      - BUILD_TYPE=cublas
+      # Context size
+      - CONTEXT_SIZE=512
+      # Parallelism
+      - THREADS=6
+      # No auth by default (local-only port)
+      - AUTH_TOKEN=false
+      # Enable CORS for local dev
+      - CORS=true
+      - CORS_ALLOW_ORIGINS=*
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      ops.managed: "true"
+      ops.service: "localai"
+      ops.component: "api"
+    networks:
+      - localai_default
+
+  # ── LocalAI Watchdog (optional auto-reload) ──────────────────────
+  # Uncomment if you want automatic model reloading when files change
+  # localai_watcher:
+  #   image: quay.io/go-skynet/local-ai:latest
+  #   container_name: localai_watcher
+  #   restart: unless-stopped
+  #   volumes:
+  #     - localai_models:/models:ro
+  #   entrypoint: ["watchmedo", "auto-restart", "--directory", "/models", "--pattern", "*.bin", "--", "local-ai", "--models-path", "/models"]
+  #   networks:
+  #     - localai_default
+
+networks:
+  localai_default:
+    name: localai_default
+    driver: bridge
+    labels:
+      ops.managed: "true"
+      ops.service: "localai"
+
+volumes:
+  localai_models:
+    name: localai_models
