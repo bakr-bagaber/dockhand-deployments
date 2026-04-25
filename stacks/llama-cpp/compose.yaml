@@ -15,7 +15,7 @@ name: llama-cpp
 services:
   # ── Native llama.cpp server (2560 dims, no wrapper) ────────────
   Qwen3-Embedding-4B-Q4_K_M:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ops/llamacpp-embed:local
     container_name: Qwen3-Embedding-4B-Q4_K_M
     restart: unless-stopped
     deploy:
@@ -44,7 +44,7 @@ services:
 
   # ── Wrapper: 1024 dims ─────────────────────────────────────────
   Qwen3-Embedding-4B-Q4_K_M-1024:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ops/llamacpp-wrap:local
     container_name: Qwen3-Embedding-4B-Q4_K_M-1024
     restart: unless-stopped
     deploy:
@@ -53,9 +53,6 @@ services:
           memory: 512M
     volumes:
       - llama_cpp_embed:/models
-      - ./scripts:/scripts:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 1024 8080"]
     ports:
       - "127.0.0.1:8091:8080"
     labels:
@@ -68,7 +65,7 @@ services:
 
   # ── Wrapper: 1536 dims ─────────────────────────────────────────
   Qwen3-Embedding-4B-Q4_K_M-1536:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ops/llamacpp-wrap:local
     container_name: Qwen3-Embedding-4B-Q4_K_M-1536
     restart: unless-stopped
     deploy:
@@ -77,9 +74,6 @@ services:
           memory: 512M
     volumes:
       - llama_cpp_embed:/models
-      - ./scripts:/scripts:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 1536 8080"]
     ports:
       - "127.0.0.1:8092:8080"
     labels:
@@ -92,7 +86,7 @@ services:
 
   # ── Wrapper: 2048 dims ─────────────────────────────────────────
   Qwen3-Embedding-4B-Q4_K_M-2048:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    image: ops/llamacpp-wrap:local
     container_name: Qwen3-Embedding-4B-Q4_K_M-2048
     restart: unless-stopped
     deploy:
@@ -101,9 +95,6 @@ services:
           memory: 512M
     volumes:
       - llama_cpp_embed:/models
-      - ./scripts:/scripts:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 2048 8080"]
     ports:
       - "127.0.0.1:8093:8080"
     labels:
