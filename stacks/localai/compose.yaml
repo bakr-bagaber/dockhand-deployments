@@ -8,7 +8,7 @@ name: localai
 services:
   # ── LocalAI API Server ───────────────────────────────────────────
   localai_api:
-    image: quay.io/go-skynet/local-ai:latest
+    image: quay.io/go-skynet/local-ai:master
     container_name: localai_api
     restart: unless-stopped
     ports:
@@ -16,17 +16,17 @@ services:
     volumes:
       - localai_models:/models
     environment:
-      # Backend to use: llama.cpp (cublas), transformers, etc.
+      # Build type: cublas = CUDA-enabled llama.cpp
       - BUILD_TYPE=cublas
-      # Context size
-      - CONTEXT_SIZE=512
+      # Context size (increase for longer texts)
+      - CONTEXT_SIZE=32768
       # Parallelism
       - THREADS=6
-      # No auth by default (local-only port)
-      - AUTH_TOKEN=false
       # Enable CORS for local dev
       - CORS=true
       - CORS_ALLOW_ORIGINS=*
+      # Debug
+      - DEBUG=true
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/readyz || exit 1"]
       interval: 15s
