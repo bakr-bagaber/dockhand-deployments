@@ -1,358 +1,127 @@
 name: llama-cpp
 
-# All services start mode=stopped. Only the benchmark orchestrator
-# (benchmark-llm-models.py) starts individual services one at a time,
-# runs the HTTP benchmark, collects stats, then stops and removes the
-# container before moving to the next model.
+# Qwen3-Embedding-4B deployment with dimension-reducing wrappers.
+# All services use CPU-only llama.cpp server (no GPU).
 #
-# IMPORTANT — WSL/docker.exe bind mount limitation:
-#   Bind mounts from WSL paths (e.g. /home/bakrb/...) into docker.exe are
-#   EMPTY inside containers. Only named Docker volumes work reliably.
-#   Model files are seeded via `docker cp` (which works correctly).
-#   Run `seed-llama-cpp-models.sh` before first use or after model changes.
+# Port layout:
+#   8090: llama.cpp native server (2560 dims, no wrapper)
+#   8091: wrapper → 1024 dims
+#   8092: wrapper → 1536 dims
+#   8093: wrapper → 2048 dims
+#
+# Model: Qwen3-Embedding-4B-Q4_K_M.gguf
+# After stack up, seed model: docker cp Qwen3-Embedding-4B-Q4_K_M.gguf llama_cpp_embed:/models/
 
 services:
-  # ── Gemma 4 26B MoE ──────────────────────────────────────────────
-  gemma-4-26B-A4B-it-UD-Q4_K_M:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_gemma-4-26B
+  # ── Native llama.cpp server (2560 dims, no wrapper) ────────────
+  Qwen3-Embedding-4B-Q4_K_M:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: Qwen3-Embedding-4B-Q4_K_M
+    restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+        limits:
+          memory: 5G
     volumes:
-      - gemma-4-26B-A4B-it-UD-Q4_K_M:/models:ro
+      - llama_cpp_embed:/models
     entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf --mmproj /models/mmproj-F16.gguf -ngl 999 -cmoe -c 262144 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
+    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3-Embedding-4B-Q4_K_M.gguf --embeddings -ngl 0 -c 32768 --threads 6 --host 0.0.0.0 --port 8080"]
     ports:
-      - "8090:8080"
-    restart: "no"
+      - "127.0.0.1:8090:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      ops.managed: "true"
+      ops.service: llama-cpp
+      ops.component: embedding-server
+      ops.model: Qwen3-Embedding-4B-Q4_K_M
+    networks:
+      - llama_cpp_embed_net
 
-  # ── Gemma 4 E4B Dense ────────────────────────────────────────────
-  gemma-4-E4B-it-UD-Q4_K_XL:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_gemma-4-E4B
+  # ── Wrapper: 1024 dims ─────────────────────────────────────────
+  Qwen3-Embedding-4B-Q4_K_M-1024:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: Qwen3-Embedding-4B-Q4_K_M-1024
+    restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+        limits:
+          memory: 512M
     volumes:
-      - gemma-4-E4B-it-UD-Q4_K_XL:/models:ro
+      - llama_cpp_embed:/models
+      - ./scripts:/scripts:ro
     entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/gemma-4-E4B-it-UD-Q4_K_XL.gguf --mmproj /models/mmproj-F16.gguf -ngl 999 -c 131072 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
+    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 1024 8080"]
     ports:
-      - "8091:8080"
-    restart: "no"
+      - "127.0.0.1:8091:8080"
+    labels:
+      ops.managed: "true"
+      ops.service: llama-cpp
+      ops.component: embedding-wrapper
+      ops.wrapper_dims: "1024"
+    networks:
+      - llama_cpp_embed_net
 
-  # ── Gemma 4 E2B Dense ────────────────────────────────────────────
-  gemma-4-E2B-it-UD-Q4_K_XL:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_gemma-4-E2B
+  # ── Wrapper: 1536 dims ─────────────────────────────────────────
+  Qwen3-Embedding-4B-Q4_K_M-1536:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: Qwen3-Embedding-4B-Q4_K_M-1536
+    restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+        limits:
+          memory: 512M
     volumes:
-      - gemma-4-E2B-it-UD-Q4_K_XL:/models:ro
+      - llama_cpp_embed:/models
+      - ./scripts:/scripts:ro
     entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/gemma-4-E2B-it-UD-Q4_K_XL.gguf --mmproj /models/mmproj-F16.gguf -ngl 999 -c 131072 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
+    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 1536 8080"]
     ports:
-      - "8092:8080"
-    restart: "no"
+      - "127.0.0.1:8092:8080"
+    labels:
+      ops.managed: "true"
+      ops.service: llama-cpp
+      ops.component: embedding-wrapper
+      ops.wrapper_dims: "1536"
+    networks:
+      - llama_cpp_embed_net
 
-  # ── Qwen 3.5 0.8B Dense — GPU variant ───────────────────────────
-  Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-0.8B-gpu
+  # ── Wrapper: 2048 dims ─────────────────────────────────────────
+  Qwen3-Embedding-4B-Q4_K_M-2048:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: Qwen3-Embedding-4B-Q4_K_M-2048
+    restart: unless-stopped
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+        limits:
+          memory: 512M
     volumes:
-      - Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled:/models:ro
+      - llama_cpp_embed:/models
+      - ./scripts:/scripts:ro
     entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-0.8B.Q4_K_M.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
+    command: ["python3 /scripts/wrapper.py Qwen3-Embedding-4B-Q4_K_M 8090 2048 8080"]
     ports:
-      - "8093:8080"
-    restart: "no"
+      - "127.0.0.1:8093:8080"
+    labels:
+      ops.managed: "true"
+      ops.service: llama-cpp
+      ops.component: embedding-wrapper
+      ops.wrapper_dims: "2048"
+    networks:
+      - llama_cpp_embed_net
 
-  # ── Qwen 3.5 0.8B Dense — CPU variant ───────────────────────────
-  Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-cpu:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-0.8B-cpu
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-0.8B.Q4_K_M.gguf -ngl 0 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8094:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 2B Dense — GPU variant ──────────────────────────────
-  Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-2B-gpu
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-2B.Q4_K_M.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8095:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 2B Dense — CPU variant ────────────────────────────
-  Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled-cpu:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-2B-cpu
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-2B.Q4_K_M.gguf -ngl 0 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8096:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 4B v3 Dense — GPU ──────────────────────────────────
-  Qwen3.5-4B-v3:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-4B-v3
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-4B-v3:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-4B.Q4_K_M.gguf --mmproj /models/mmproj.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8097:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 9B v3 Dense — GPU ──────────────────────────────────
-  Qwen3.5-9B-v3:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-9B-v3
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-9B-v3:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-9B.Q4_K_M.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8098:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 9B Uncensored Dense — GPU ──────────────────────────
-  Qwen3.5-9B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-9B-Unc
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-9B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf --mmproj /models/mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8099:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 4B Uncensored Dense — GPU ──────────────────────────
-  Qwen3.5-4B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-4B-Unc
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-4B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf --mmproj /models/mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8100:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 2B Uncensored Dense — GPU ──────────────────────────
-  Qwen3.5-2B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-2B-Unc
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-2B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf --mmproj /models/mmproj-Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-f16.gguf -ngl 999 -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8101:8080"
-    restart: "no"
-
-  # ── Qwen 3.5 35B MoE — GPU ───────────────────────────────────────
-  Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Qwen3.5-35B
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf --mmproj /models/mmproj-Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf -ngl 999 -cmoe -c 32768 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8102:8080"
-    restart: "no"
-
-  # ── Gemma 4 E4B Uncensored Dense — GPU ───────────────────────────
-  Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Gemma-4-E4B-Unc
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf --mmproj /models/mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf -ngl 999 -c 131072 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8103:8080"
-    restart: "no"
-
-  # ── Gemma 4 E2B Uncensored Dense — GPU ───────────────────────────
-  Gemma-4-E2B-Uncensored-HauhauCS-Aggressive:
-    image: ops/llamacpp-cuda-b8756:local
-    container_name: bm_Gemma-4-E2B-Unc
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    volumes:
-      - Gemma-4-E2B-Uncensored-HauhauCS-Aggressive:/models:ro
-    entrypoint: ["/bin/bash", "-lc"]
-    command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf --mmproj /models/mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf -ngl 999 -c 131072 --fit on --fit-target 512 --threads 6 --host 0.0.0.0 --port 8080"]
-    ports:
-      - "8104:8080"
-    restart: "no"
+networks:
+  llama_cpp_embed_net:
+    name: llama_cpp_embed_net
+    driver: bridge
+    labels:
+      ops.managed: "true"
+      ops.service: llama-cpp
 
 volumes:
-  gemma-4-26B-A4B-it-UD-Q4_K_M:
-  gemma-4-E4B-it-UD-Q4_K_XL:
-  gemma-4-E2B-it-UD-Q4_K_XL:
-  Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled:
-  Qwen3.5-2B-Claude-4.6-Opus-Reasoning-Distilled:
-  Qwen3.5-4B-v3:
-  Qwen3.5-9B-v3:
-  Qwen3.5-9B-Uncensored-HauhauCS-Aggressive:
-  Qwen3.5-4B-Uncensored-HauhauCS-Aggressive:
-  Qwen3.5-2B-Uncensored-HauhauCS-Aggressive:
-  Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive:
-  Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:
-  Gemma-4-E2B-Uncensored-HauhauCS-Aggressive:
+  llama_cpp_embed:
+    name: llama_cpp_embed
