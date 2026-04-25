@@ -12,7 +12,7 @@ import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 UPSTREAM_HOST = sys.argv[1] if len(sys.argv) > 1 else "Qwen3-Embedding-4B-Q4_K_M"
-UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8090
+UPSTREAM_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8096
 TARGET_DIMS = int(sys.argv[3]) if len(sys.argv) > 3 else 1024
 WRAPPER_PORT = int(sys.argv[4]) if len(sys.argv) > 4 else 8080
 

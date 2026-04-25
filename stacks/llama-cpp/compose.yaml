@@ -4,13 +4,12 @@ name: llama-cpp
 # All services use CPU-only llama.cpp server (no GPU).
 #
 # Port layout:
-#   8090: llama.cpp native server (2560 dims, no wrapper)
+#   8096: llama.cpp native server (2560 dims, no wrapper)
 #   8091: wrapper → 1024 dims
 #   8092: wrapper → 1536 dims
 #   8093: wrapper → 2048 dims
 #
 # Model: Qwen3-Embedding-4B-Q4_K_M.gguf
-# After stack up, seed model: docker cp Qwen3-Embedding-4B-Q4_K_M.gguf llama_cpp_embed:/models/
 
 services:
   # ── Native llama.cpp server (2560 dims, no wrapper) ────────────
@@ -27,7 +26,7 @@ services:
     entrypoint: ["/bin/bash", "-lc"]
     command: ["env -u LD_LIBRARY_PATH /app/llama-server -m /models/Qwen3-Embedding-4B-Q4_K_M.gguf --embeddings -ngl 0 -c 32768 --threads 6 --host 0.0.0.0 --port 8080"]
     ports:
-      - "127.0.0.1:8090:8080"
+      - "127.0.0.1:8096:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 10s
