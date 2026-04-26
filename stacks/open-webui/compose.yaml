@@ -4,15 +4,14 @@ x-common: &common
 
 services:
   open-webui:
-    <<: *common
-    container_name: open-webui
     image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    network_mode: host
     environment:
-      - OPENAI_API_BASE_URL=http://host.docker.internal:20129/v1
+      - OPENAI_API_BASE_URL=http://localhost:20129/v1
       - OPENAI_API_KEY=ignored
       - WEBUI_PORT=8080
-    ports:
-      - "127.0.0.1:8083:8080"
     volumes:
       - open-webui_data:/app/backend/data
     healthcheck:
