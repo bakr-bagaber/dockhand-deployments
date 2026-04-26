@@ -11,7 +11,7 @@ services:
     environment:
       - OPENAI_API_BASE_URL=http://localhost:20129/v1
       - OPENAI_API_KEY=ignored
-      - WEBUI_PORT=8083
+      - PORT=8083
     volumes:
       - open-webui_data:/app/backend/data
     healthcheck:
