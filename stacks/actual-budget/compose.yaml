@@ -1,0 +1,27 @@
+# Actual Budget — Self-hosted personal finance manager
+# Docs: https://actualbudget.org/docs/
+# Image: actualbudget/actual-server:latest
+
+services:
+  actual_server:
+    image: docker.io/actualbudget/actual-server:latest
+    container_name: actual_server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5006:5006"
+    volumes:
+      - actual_budget_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "node src/scripts/health-check.js"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      ops.managed: "true"
+      ops.service: "actual-budget"
+      ops.component: "server"
+
+volumes:
+  actual_budget_data:
+    name: actual_budget_data
